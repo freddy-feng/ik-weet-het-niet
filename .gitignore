@@ -3,3 +3,4 @@ raw/dutch-news-articles.csv
 .ipynb_checkpoints
 *.ipynb_checkpoints
 *.pyc
+*.toml
