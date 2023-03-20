@@ -4,12 +4,16 @@ import os
 import random
 from pathlib import Path
 import copy
+from datetime import datetime
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 from PIL import Image
 import base64
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 import deck_class
 ###############################################################################
@@ -24,22 +28,31 @@ def fetch_sample_data():
     data = pd.read_csv(csv_file_path)
     return data
 
-def create_new_deck(is_deck2_create=False, is_deck2_load=True):   
+def create_new_deck(mode='simple_new', file_path='data/card_deck.csv'):   
+    # return a new deck class object
+    # mode: create 'new' deck or 'load' previous df fromd csv
+    # 'simple_new' uses the default cards five suits for demonstration
 
-    if is_deck2_create:
+    if mode == 'new':
         # Create data for new user
         # Create a sample deck using 1000 dutch words
         data = fetch_sample_data()
         word_list = data['string'].tolist()
         deck2 = deck_class.Deck(word_list) # Create deck object
 
-    if is_deck2_load:
+    elif mode == 'load':
         # Load deck csv from path
-        csv_file_path = Path('data/card_deck.csv')
-        data = pd.read_csv(csv_file_path) # Previous df in csv
-
-        deck2 = deck_class.Deck() # Create deck object
-        deck2.copy_df(data) # Load df and formatting
+        file_path = Path(file_path)
+        if file_path.is_file():
+            # file exists
+            data = pd.read_csv(file_path) # Previous df in csv
+            deck2 = deck_class.Deck() # Create deck object
+            deck2.copy_df(data) # Load df and formatting
+        else:
+            raise ValueError('File does not exist!')
+        
+    elif mode == 'simple_new':
+        deck2 = deck_class.Deck()
     
     return deck2
 
@@ -58,7 +71,7 @@ def set_up_practice(deck, q_count, session):
     q_max = len(current_cards)
     if q_count > q_max:
         # Not enough current cards for practice
-        st.write(f'Reduce number of questions to {q_max} because of too few current cards!')
+        st.warning(f'Reduce number of questions to {q_max} because of too few current cards!')
         q_count = q_max
 
     practice_cards = random.sample(current_cards, q_count)
@@ -80,7 +93,7 @@ def get_slider_score(deck, key, session, i):
 def show_one_question(deck, practice_cards, session, q_count, i):
     # For each question, display question number, question, slider to get user score
     key = practice_cards[i] # Question word
-    col1, col2, col3 = st.columns([2, 4, 3])
+    col1, col2, col3, col4 = st.columns([2, 4, 3, 0.5])
     with col1:
     # Display question number
         str_q = f"""<div style="text-align: center;"><br>{i+1} of {q_count}</div>"""
@@ -89,8 +102,14 @@ def show_one_question(deck, practice_cards, session, q_count, i):
     # Display question
         st.header(f'__{key}__')
         is_key = deck.df['key'] == key
+        
         url = deck.df.loc[is_key, 'link'].tolist()[0]
-        st.write('Look it up on [woorden.org](%s).' % url)
+        st.caption('Look it up on [woorden.org](%s)' % url)
+        
+        show_last_date = deck.df.loc[is_key, 'last_visit'].tolist()[0].date()
+        show_last_score = deck.df.loc[is_key, 'last_score'].tolist()[0]
+        st.caption(f'Previous score: {show_last_score}')
+        st.caption(f'Previous review: {show_last_date}')
     with col3:
         get_slider_score(deck, key, session, i)
 
@@ -137,7 +156,6 @@ def update_submitted(deck, practice_cards, session, q_count):
     st.session_state.submitted = True
     st.session_state.deck_update_counter += 1
     if debug:
-        # painful
         st.warning(practice_cards)
         st.warning(f'q={q_count}')
         st.warning(f'session={session}')
@@ -167,28 +185,6 @@ def convert_df(df):
 # First we need a dataframe for containing the words and practice record
 # We perform a check if there's already a dataframe in the session state
 # The session state will be retained after a rerun (run the entire script again)
-
-
-
-    
-# Initialize the counter in session state
-if 'deck_update_counter' not in st.session_state:
-    st.session_state.deck_update_counter = 0
-
-# Initialize the new deck in session state
-if 'deck' not in st.session_state:
-    st.session_state.deck = None # None indicates no previous deck
-    
-# Create new deck i.e. deck 2
-if st.session_state.deck is None:
-    # Use deck2 to denote a new deck, opposed to session state deck
-    deck2 = create_new_deck()
-    
-# Assign deck1 which will be used as the working deck
-if st.session_state.deck is None:
-    deck1 = copy.deepcopy(deck2) # Use the new deck2 as working deck
-else:
-    deck1 = copy.deepcopy(st.session_state.deck) # Use the deck before rerun as working deck
     
 if 'submitted' not in st.session_state:
     st.session_state.submitted = None
@@ -205,6 +201,7 @@ if 'q_count' not in st.session_state:
     q_count = None
     st.session_state.q_count = q_count
 
+# Load session state
 practice_cards = st.session_state.practice_cards
 session = st.session_state.session
 q_count = st.session_state.q_count
@@ -214,15 +211,93 @@ q_count = st.session_state.q_count
 ###############################################################################
 # Note to self: rmb the flow is linear and with rerun.
 ###############################################################################        
-tab_h, tab_q, tab_w, tab_s, tab_r, tab_d = st.tabs(['Home', 'Questions', 'Word list', ':construction: Statistics', ':construction: Credits', ':construction: Development'])
+tab_h, tab_t, tab_w, tab_s, tab_r, tab_d = st.tabs(['Home', 'Test', 'Word list', 'Statistics', ':construction: Credits', ':construction: Development'])
 ###############################################################################    
 with st.sidebar:
+   
     sep_line()
+    
+    with st.expander(':point_down: Choose a deck'):
+        
+        deck_options = {'Load deck': 'load', '1000 Dutch words (NOS)': 'new', '5 suits': 'simple_new'}
+        deck_load_path = 'data/card_deck.csv'
+        st.caption(f'Load path: {deck_load_path}')
+        deck_mode = st.radio(
+            label='Select deck to use',
+            options=list(deck_options.keys()),
+            key='deck_mode')
+
+        # Initialize the update counter
+        if 'deck_update_counter' not in st.session_state:
+            st.session_state.deck_update_counter = 0
+        # Initialize the new deck in session state
+        if 'deck' not in st.session_state:
+            # No need to run during reuns
+            st.session_state.deck = None # None indicates no previous deck
+        if st.button('Refresh deck'):
+            st.session_state.deck = None # Reset such that deck2 is assigned again
+        # Assign deck1 which will be used as the working deck
+        if st.session_state.deck is None:
+            # Use deck2 to denote a new deck, opposed to session state deck
+            deck2 = create_new_deck(mode=deck_options[deck_mode], file_path=deck_load_path)
+            deck1 = copy.deepcopy(deck2)
+            st.session_state.deck = copy.deepcopy(deck2) # Also save to session state
+        else:
+            # A deck already exists
+            deck1 = copy.deepcopy(st.session_state.deck) # Use the deck before rerun as working deck
+    
+    #sep_line()
+    # Set up practice parameters
+    with st.expander(':point_down: Configure practice session'):
+
+        # Display input widgets for user to decide on q_count and session_select
+        help_q_count = 'How many words would you like to practice in the session?'
+        q_count_select = st.slider('How many questions?', min_value=1, max_value=20, step=1, help=help_q_count)
+
+        help_session = 'An indexing/box system to rotate the sets of words for practice e.g. 0->1->...->9->0->...'
+        box_options = [chr(x+97).upper() for x in range(10)]
+        session_select = st.selectbox('Which box?', options=box_options, help=help_session)
+
+        if st.button('Let\'s go :fire:', key='is_active_practice '):
+            deck1, practice_cards, session, q_count = set_up_practice(deck1, q_count_select, session_select) # Set the parameters for practice
+            # Update session state
+            st.session_state.submitted = False # Reset submitted state when new practice begins
+            st.session_state.deck = copy.deepcopy(deck1)
+            st.session_state.practice_cards = practice_cards
+            st.session_state.session = session
+            st.session_state.q_count = q_count
+        
+    #sep_line()
+    
+    with st.expander(':point_down: Deck management'):
+    
+        # Download the dataframe as a CSV file
+        st.download_button(
+            label='Download current deck',
+            data=convert_df(st.session_state.deck.df),
+#            data=convert_df(deck1.df),
+            file_name='card_deck.csv',
+            mime='text/csv')
+        
+        # multiselect to filter data
+        col_names = list(st.session_state.deck.df.columns)
+        score_names = list(st.session_state.deck.df['n_scores'].iat[0].keys()) # s0...s5
+        col_names = col_names + score_names
+        cols_not_default = ['link', 'study_interval', 'last_visit', 'last_session', 'easiness', 'n_scores', 'box_id']  
+        col_show_default = [x for x in col_names if x not in cols_not_default]
+        selected_cols = st.multiselect('Show columns', col_names, col_show_default)
+        
+        score_names2 = [int(list(x)[1]) for x in score_names] # Convert 's0' to 0 etc.
+        selected_scores = st.multiselect('Show words with last score', score_names2, score_names2)
+        
+        
+    sep_line()
+    
+
     st.sidebar.title('ik weet het niet')
     st.caption(
         """
-        simply spaced repetition...
-        created by
+        simply spaced repetition created by
         """)
     st.markdown(
         """
@@ -235,58 +310,7 @@ with st.sidebar:
          :speech_balloon: | [Linkedin](https://www.linkedin.com/in/freddy-feng/) | 
         [GitHub](https://github.com/freddy-feng/)
         """)
-    
-    sep_line()
-    
-    if debug:
-        st.warning(f'session_state.deck is none = {st.session_state.deck is None}')
-        st.warning(f'deck update count = {st.session_state.deck_update_counter}')
-        st.warning(f'submitted state = {st.session_state.submitted}')
-
-    
-    st.header('Set up practice session here :point_down:')
-
-    with st.expander('How to use'):
-        st.markdown(
-            """
-            1. Set up a practice session under the side bar
-            2. Answer questions under the Questions tab
-            3. Submit answers
-            4. Rinse and repeat
-            """)
-    
-    # Display input widgets for user to decide on q_count and session_select
-    help_q_count = 'How many words would you like to practice in the session?'
-    q_count_select = st.slider('Select questions to practice', min_value=1, max_value=20, step=1, help=help_q_count)
-    
-    help_session = 'An indexing/box system to rotate the sets of words for practice e.g. 0->1->...->9->0->...'
-    session_select = st.selectbox('Select index to practice', options=np.arange(10), help=help_session)
-    
-    if st.button('Let\'s go :fire:', key='is_active_practice '):
-        deck1, practice_cards, session, q_count = set_up_practice(deck1, q_count_select, session_select) # Set the parameters for practice
-        # Update session state
-        st.session_state.submitted = False # Reset submitted state when new practice begins
-        st.session_state.deck = copy.deepcopy(deck1)
-        st.session_state.practice_cards = practice_cards
-        st.session_state.session = session
-        st.session_state.q_count = q_count
-        
-    sep_line()
-    
-    st.header('Deck managment')
-    
-    # Download the dataframe as a CSV file
-    st.download_button(
-        label='Download current deck',
-        data=convert_df(deck1.df),
-        file_name='card_deck.csv',
-        mime='text/csv')
-    st.warning(
-        """
-        To be added:
-        - Upload a csv i.e. list or previous deck
-        - Reset deck
-        """)
+    st.caption(':smiley: Let me know what you think!')
     
     sep_line()
 
@@ -296,16 +320,18 @@ with tab_h:
 
     file_path = Path('gif/word_cloud_streamlit.gif')
     st.markdown(img_to_html(file_path), unsafe_allow_html=True) # Gif
-    st.caption('1000 most frequent Dutch words from news articles')
+    st.caption('1000 most frequent Dutch words extracted from news articles')
 
     
-    with st.expander('What is this app'):
+    with st.expander('About this app'):
         st.markdown(
             """
             - A toy project for personal use
+            - An simple app for reinforcing one's memory
             - [Spaced repetition] trick (https://en.wikipedia.org/wiki/Spaced_repetition) in essence
                 - Forget curve --> Recall --> Rinse and repeat
-                - No idea how well it works... so give it a try""")
+            - N.B. No idea how well it works... so give it a try
+            """)
         
     with st.expander('Motivations'):
         st.markdown(
@@ -317,28 +343,28 @@ with tab_h:
             - App development - misschien?
             """)
 
-    sep_line()    
-    st.write('Let me know what you think :smiley:')
+
 
 ###############################################################################    
-with tab_q:
+with tab_t: # Test tab
 # Display questions and submit answers
-    st.header('How well do you remember the word?')
-    st.write('Rate from 0 (nope) to 5 (perfect), where 3 or above is a successful recall.')
+    st.subheader('Remember to press submit after answering all questions.')
 
-    with st.expander('What does the score stand for'):
+    with st.expander('How to score'):
         st.markdown("""
-            :fire: 5: Correct response with perfect recall.
+            Use the slider to rate on how well you can answer a given card. A correct recall will remove it from the current deck and wait upon next review.
+        
+            :fire: __5__ - __Correct__ response with perfect recall.
 
-            :stuck_out_tongue_winking_eye: 4: Correct response, after some hesitation.
+            :stuck_out_tongue_winking_eye: __4__ - __Correct__ response, after some hesitation.
 
-            :sweat: 3: Correct response, but required significant effort to recall.
+            :sweat: __3__ - __Correct__ response, but required significant effort to recall.
 
-            :broken_heart: 2: Incorrect response, but upon seeing the correct answer it seemed easy to remember.
+            :broken_heart: __2__ - __Wrong__ response, but upon seeing the correct answer it seemed easy to remember.
 
-            :tired_face: 1: Incorrect response, but upon seeing the correct answer it felt familiar.
+            :tired_face: __1__ - __Wrong__ response, but upon seeing the correct answer it felt familiar.
 
-            :hankey: 0: Total blackout!
+            :hankey: __0__ - __Wrong__ reponse. Total blackout!
         """)
     sep_line()
     
@@ -348,7 +374,7 @@ with tab_q:
         st.write('Please set up a practice session from the __sidebar__ first. :point_left:')
     
     elif st.session_state.submitted:
-        st.subheader('Answer submitted :thumbsup:')
+        st.subheader(':thumbsup: Answer submitted')
         st.write(':point_left: Wanna start another session?')
         st.write(':point_right: Or look at the statistics?')
     
@@ -388,20 +414,38 @@ with tab_w:
         image = Image.open(file_path)
         st.image(image, caption='Distribution of frequent words in the dataset')
 
-    if st.session_state.deck is not None:
-        st.write('Show sessions state deck')
-        st.write(st.session_state.deck.df)
+    with st.expander('Current deck content'):
+        if st.session_state.deck is not None:
+            st.write(st.session_state.deck.df['key'].tolist())
         
 #------------------------------------------------------------------------------
     
 with tab_s:
 # Statistics page
-    st.write('Under construction')
-    st.write('Show score')
-    st.write('Show easiness')
-    st.write('Show deck1')
-    st.write(deck1.df)
-    st.write(deck1.df['key'].tolist())
+    if st.session_state.deck is not None:
+        df_show = st.session_state.deck.scores_dict_to_df(drop_scores_dict=False)
+
+
+        # Plot score distribution
+        with st.expander('Plot score counts'):
+            
+            df_scores = pd.DataFrame(df_show[score_names].sum(axis=0)).reset_index(drop=False) # Column sums for score counts
+            df_scores = df_scores.rename(columns={'index': 'Score', 0: 'Counts'})
+            fig, ax = plt.subplots(figsize=(6,4))
+            sns.barplot(
+                data=df_scores, x='Score', y='Counts'
+            )
+            plt.tight_layout()
+            st.pyplot(fig)
+        
+ 
+        # Filter columns and rows
+        with st.expander('Show deck data'):
+            df_show = df_show.loc[df_show.last_score.isin(selected_scores), selected_cols]
+            st.dataframe(df_show)
+                
+#        hide_cols = ['link', 'study_interval', 'previous_session', 'easiness']
+#        st.dataframe(st.session_state.deck.scores_dict_to_df(drop_scores_dict=True).drop(hide_cols, axis=1))
 #------------------------------------------------------------------------------
 with tab_r:
 # List references in the tab
@@ -409,9 +453,15 @@ with tab_r:
 #------------------------------------------------------------------------------
 with tab_d:
 # For debug, development, displaying session state
-    if debug:
+    
+    with st.expander('Session state:'):
         st.write(st.session_state)
-        
+    
+    if debug:
+        if st.session_state.deck is not None:
+            st.write('Check: session_state.deck')
+            st.dataframe(st.session_state.deck.df)           
+            
     with st.expander('Development status'):
         st.write("""
         - This app is still under development.
@@ -420,7 +470,13 @@ with tab_d:
         """)
     with st.expander('Future works'):
         st.write(""" 
+        - Currently, the workflow involves manual labor: load->train->update->download->manually replace old file. This is something I want to improve.
+        - Maybe a online host, fetching the csv from github or google sheet?
+        - Plural, conjugations are still included in the list => actually less than 1000 words?
+        - Deck
+            - 1000 words from dutch lessons Bart de Pau, Dutchies to Be
         - Better and more useful functions!
+            - Edit, add, remove words from deck
             - Experiment more interactive stuff in streamlit
             - It works like flashcard now, but it does not look like any flashcard now...
             - Showing the answer rather than the link to dictionary
@@ -429,6 +485,7 @@ with tab_d:
             - Creating custom decks
         - Add an alternative mode based on [SM-2 algorithm](https://en.wikipedia.org/wiki/SuperMemo#Description_of_SM-2_algorithm). 
         - What's the difference between box-based and interval-based approach?
+        - Some games inspired by Geheugentrainer (a Dutch TV program testing people's memory on grocery shopping)
         """)
 #------------------------------------------------------------------------------
 
@@ -447,25 +504,8 @@ with tab_d:
 #------------------------------------------------------------------------------
            
 #------------------------------------------------------------------------------
-# Temp storage
+# Temp storage, not tested codes
 #------------------------------------------------------------------------------
-            # Add the score to the corresponding count in the dataframe
-#            idx = df.index[df['suit'] == suit].tolist()[0]
-#            df.loc[idx, 'count'] += score
-
-#    elif st.button('Create deck'):
-        # Download the dataframe as a CSV file
-#        st.download_button(
-#            label='Upload a CSV file consisting a list of things you want to memorize',
-#            data=df.to_csv(index=False),
-#            file_name='card_deck.csv',
-#            mime='text/csv'
-#        )
-#------------------------------------------------------------------------------
-#    if st.button('(BETA) Reset deck'):
-#        del st.session_state['deck_update_counter']
-#        del st.session_state['deck']
-    
     # Upload a deck
 #    uploaded_file = st.file_uploader("(BETA) Upload previous deck from local")
 #    if uploaded_file is not None:
@@ -487,3 +527,29 @@ with tab_d:
 
 # Need more careful application on session state
 #------------------------------------------------------------------------------
+
+
+#############################
+# Old codeblock initialize deck
+#############################
+# Initialize the counter in session state
+#if 'deck_update_counter' not in st.session_state:
+#    st.session_state.deck_update_counter = 0
+
+# Initialize the new deck in session state
+#if 'deck' not in st.session_state:
+#    st.session_state.deck = None # None indicates no previous deck
+    
+# Create new deck i.e. deck 2
+#if st.session_state.deck is None:
+    # Use deck2 to denote a new deck, opposed to session state deck
+#    deck2 = create_new_deck(mode='simple_new') # Using 5 suits
+    #deck2 = create_new_deck(mode='new') # Using 1000 dutch words
+    #deck2 = create_new_deck(mode='load') # Using previous deck
+    
+# Assign deck1 which will be used as the working deck
+#if st.session_state.deck is None:
+#    deck1 = copy.deepcopy(deck2) # Use the new deck2 as working deck
+#else:
+#    deck1 = copy.deepcopy(st.session_state.deck)     
+#############################
