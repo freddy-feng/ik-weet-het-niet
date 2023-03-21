@@ -307,7 +307,7 @@ with st.sidebar:
     st.caption(':book: | MSc Statistics & Data Science')
     st.markdown(
         """
-         :speech_balloon: | [Linkedin](https://www.linkedin.com/in/freddy-feng/) | 
+         :speech_balloon: | [Profile](https://freddy-feng.github.io/postcard/) | [Linkedin](https://www.linkedin.com/in/freddy-feng/) | 
         [GitHub](https://github.com/freddy-feng/)
         """)
     st.caption(':smiley: Let me know what you think!')
