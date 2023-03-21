@@ -211,7 +211,7 @@ q_count = st.session_state.q_count
 ###############################################################################
 # Note to self: rmb the flow is linear and with rerun.
 ###############################################################################        
-tab_h, tab_t, tab_w, tab_s, tab_r, tab_d = st.tabs(['Home', 'Test', 'Word list', 'Statistics', ':construction: Credits', ':construction: Development'])
+tab_h, tab_t, tab_w, tab_s, tab_r, tab_d = st.tabs(['Home', 'Test', 'Word list', 'Statistics', 'Reference', ':construction: Development'])
 ###############################################################################    
 with st.sidebar:
    
@@ -393,9 +393,9 @@ with tab_w:
 
         st.markdown("""
             - The word list is based on the most frequent words from the news articles published by NOS during 2010 - 2020.
-            - Thanks to Max Scheijen, the texts from NOS online news articles are scrapped and made available at   [https://www.kaggle.com/datasets/maxscheijen/dutch-news-articles]. 
-            - The word list is then prepared by counting the occurence and sorting, after tokenizing and wrangling.
-            - The deck/word list can be downloaded in csv format by clicking the button under the side bar.
+            - It is prepared from counting the word frequency in the original texts.
+            - Currently, the word list does not distinguish the words from verb conjugation, singular/plural form etc. Thus, it may be also correct to say that the word list consists of less than 1000 words.
+            - The deck/word list can be downloaded in csv format by clicking the button at 'Deck Management' under the side bar.
             """)
     
     # Note to myself... better do a moving average?
@@ -449,7 +449,10 @@ with tab_s:
 #------------------------------------------------------------------------------
 with tab_r:
 # List references in the tab
-    st.write('Under construction')
+    st.write(
+        """
+        - Thanks to Max Scheijen, the texts from NOS online news articles are scrapped and made available at   [https://www.kaggle.com/datasets/maxscheijen/dutch-news-articles]. 
+        """)
 #------------------------------------------------------------------------------
 with tab_d:
 # For debug, development, displaying session state
